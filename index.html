@@ -1,0 +1,452 @@
+<body>
+	<style></style>
+	<!-- msal.min.js can be used in the place of msal.js; included msal.js to make debug easy -->
+	<script
+		type="text/javascript"
+		src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js"
+	></script>
+
+	<!-- To help ensure reliability, Microsoft provides a second CDN -->
+	<script type="text/javascript">
+		if (typeof Msal === "undefined")
+			document.write(
+				unescape(
+					"%3Cscript src='https://alcdn.msftauth.net/browser/2.35.0/js/msal-browser.js' type='text/javascript' crossorigin='anonymous' %3E%3C/script%3E"
+				)
+			);
+	</script>
+
+	<script
+		src="https://code.jquery.com/jquery-3.2.1.slim.min.js"
+		integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+		crossorigin="anonymous"
+	></script>
+	<script
+		src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js"
+		integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+		crossorigin="anonymous"
+	></script>
+	<script
+		src="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/js/bootstrap.min.js"
+		integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+		crossorigin="anonymous"
+	></script>
+
+	<!-- adding Bootstrap 4 for UI components  -->
+	<link
+		href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css"
+		rel="stylesheet"
+		integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC"
+		crossorigin="anonymous"
+	/>
+
+	<!-- importing bootstrap.js and supporting js libraries -->
+	<script
+		src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"
+		integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM"
+		crossorigin="anonymous"
+	></script>
+
+	<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+		<a class="navbar-brand" href="/">MS Identity Platform</a>
+		<!-- <div class="btn-group ml-auto dropleft"> -->
+		<button type="button" id="SignIn" class="btn btn-secondary">Sign In</button>
+		<!-- </div> -->
+	</nav>
+	<br />
+	<h5 class="card-header text-center">
+		Vanilla JavaScript SPA calling MS Graph API with MSAL.JS
+	</h5>
+	<br />
+	<div class="row" style="margin: auto">
+		<div id="card-div" class="col-md-3" style="display: none">
+			<div class="card text-center">
+				<div class="card-body">
+					<h5 class="card-title" id="WelcomeMessage">
+						Please sign-in to see your profile and read your mails
+					</h5>
+					<div id="profile-div"></div>
+					<br />
+					<br />
+					<button class="btn btn-primary" id="seeProfile">See Profile</button>
+					<br />
+					<br />
+					<button class="btn btn-primary" id="readMail">Read Mails</button>
+				</div>
+			</div>
+		</div>
+		<br />
+		<br />
+		<div class="col-md-4">
+			<div class="list-group" id="list-tab" role="tablist"></div>
+		</div>
+		<div class="col-md-5">
+			<div class="tab-content" id="nav-tabContent"></div>
+		</div>
+	</div>
+	<br />
+	<br />
+
+	<script type="module">
+		/* ------------------------------------ */
+		/* ------------ AUTHCONFIG ------------ */
+
+		const msalConfig = {
+			auth: {
+				clientId: "<clientId>",
+				authority: "https://login.microsoftonline.com/<authority>",
+			},
+			cache: {
+				cacheLocation: "sessionStorage", // This configures where your cache will be stored
+				storeAuthStateInCookie: false, // Set this to "true" if you are having issues on IE11 or Edge
+			},
+			system: {
+				loggerOptions: {
+					logLevel: msal.LogLevel.Trace,
+					loggerCallback: (level, message, containsPii) => {
+						if (containsPii) {
+							return;
+						}
+						switch (level) {
+							case msal.LogLevel.Error:
+								console.error(message);
+								return;
+							case msal.LogLevel.Info:
+								console.info(message);
+								return;
+							case msal.LogLevel.Verbose:
+								console.debug(message);
+								return;
+							case msal.LogLevel.Warning:
+								console.warn(message);
+								return;
+							default:
+								console.log(message);
+								return;
+						}
+					},
+				},
+			},
+			telemetry: {
+				application: {
+					appName: "MSAL Browser V2 Default Sample",
+					appVersion: "1.0.0",
+				},
+			},
+		};
+
+		// Add here scopes for id token to be used at MS Identity Platform endpoints.
+		const loginRequest = {
+			scopes: ["User.Read"],
+		};
+
+		// Add here the endpoints for MS Graph API services you would like to use.
+		const graphConfig = {
+			graphMeEndpoint: "https://graph.microsoft.com/v1.0/me",
+			graphMailEndpoint: "https://graph.microsoft.com/v1.0/me/messages",
+		};
+
+		// Add here scopes for access token to be used at MS Graph API endpoints.
+		const tokenRequest = {
+			scopes: ["Mail.Read"],
+			forceRefresh: false, // Set this to "true" to skip a cached token and go to the server to get a new token
+		};
+
+		const silentRequest = {
+			scopes: ["openid", "profile", "User.Read", "Mail.Read"],
+		};
+
+		const logoutRequest = {};
+
+		/* ------------------------------------ */
+		/* --------------- AUTH --------------- */
+
+		// If you support IE, our recommendation is that you sign-in using Redirect APIs
+		// If you as a developer are testing using Edge InPrivate mode, please add "isEdge" to the if check
+		/*
+		 * Browser check variables
+		 * If you support IE, our recommendation is that you sign-in using Redirect APIs
+		 * If you as a developer are testing using Edge InPrivate mode, please add "isEdge" to the if check
+		 */
+		const ua = window.navigator.userAgent;
+		const msie = ua.indexOf("MSIE ");
+		const msie11 = ua.indexOf("Trident/");
+		const msedge = ua.indexOf("Edge/");
+		const isIE = msie > 0 || msie11 > 0;
+		const isEdge = msedge > 0;
+
+		let signInType;
+		let accountId = "";
+
+		/*
+		 * Create the main myMSALObj instance
+		 * configuration parameters are located at authConfig.js
+		 */
+		const myMSALObj = new msal.PublicClientApplication(msalConfig);
+
+		// Redirect: once login is successful and redirects with tokens, call Graph API
+		myMSALObj.initialize().then(() => {
+			myMSALObj
+				.handleRedirectPromise()
+				.then(handleResponse)
+				.catch((err) => {
+					console.error(err);
+				});
+		});
+
+		function handleResponse(resp) {
+			const isInIframe = window.parent !== window;
+			if (!isInIframe) {
+				if (resp !== null) {
+					accountId = resp.account.homeAccountId;
+					showWelcomeMessage(resp.account);
+					getTokenRedirect(loginRequest, resp.account);
+				} else {
+					myMSALObj
+						.ssoSilent(silentRequest)
+						.then(() => {
+							const currentAccounts = myMSALObj.getAllAccounts();
+							accountId = currentAccounts[0].homeAccountId;
+							showWelcomeMessage(currentAccounts[0]);
+							getTokenRedirect(loginRequest, currentAccounts[0]);
+						})
+						.catch((error) => {
+							console.error("Silent Error: " + error);
+							if (error instanceof msal.InteractionRequiredAuthError) {
+								signIn("loginPopup");
+							}
+						});
+				}
+			}
+		}
+
+		async function signIn(method) {
+			signInType = isIE ? "loginRedirect" : method;
+			if (signInType === "loginPopup") {
+				return myMSALObj
+					.loginPopup(loginRequest)
+					.then(handleResponse)
+					.catch(function (error) {
+						console.log(error);
+					});
+			} else if (signInType === "loginRedirect") {
+				return myMSALObj.loginRedirect(loginRequest);
+			}
+		}
+
+		function signOut() {
+			const logoutRequest = {
+				account: myMSALObj.getAccountByHomeId(homeAccountId),
+			};
+			myMSALObj.logoutRedirect(logoutRequest);
+		}
+
+		async function getTokenPopup(request, account) {
+			request.account = account;
+			return await myMSALObj
+				.acquireTokenSilent(request)
+				.catch(async (error) => {
+					console.log("silent token acquisition fails.");
+					if (error instanceof msal.InteractionRequiredAuthError) {
+						console.log("acquiring token using popup");
+						return myMSALObj.acquireTokenPopup(request).catch((error) => {
+							console.error(error);
+						});
+					} else {
+						console.error(error);
+					}
+				});
+		}
+
+		// This function can be removed if you do not need to support IE
+		async function getTokenRedirect(request, account) {
+			request.account = account;
+			return await myMSALObj
+				.acquireTokenSilent(request)
+				.catch(async (error) => {
+					console.log("silent token acquisition fails.");
+					if (error instanceof msal.InteractionRequiredAuthError) {
+						// fallback to interaction when silent call fails
+						console.log("acquiring token using redirect");
+						myMSALObj.acquireTokenRedirect(request);
+					} else {
+						console.error(error);
+					}
+				});
+		}
+
+		/* ------------------------------------ */
+		/* --------------- GRAPH -------------- */
+
+		// Helper function to call MS Graph API endpoint
+		// using authorization bearer token scheme
+		function callMSGraph(endpoint, accessToken, callback) {
+			const headers = new Headers();
+			const bearer = `Bearer ${accessToken}`;
+
+			headers.append("Authorization", bearer);
+
+			const options = {
+				method: "GET",
+				headers: headers,
+			};
+
+			console.log("request made to Graph API at: " + new Date().toString());
+
+			fetch(endpoint, options)
+				.then((response) => response.json())
+				.then((response) => callback(response, endpoint))
+				.catch((error) => console.log(error));
+		}
+
+		async function seeProfile() {
+			const currentAcc = myMSALObj.getAccountByHomeId(accountId);
+			if (currentAcc) {
+				const response = await getTokenPopup(loginRequest, currentAcc).catch(
+					(error) => {
+						console.log(error);
+					}
+				);
+				callMSGraph(
+					graphConfig.graphMeEndpoint,
+					response.accessToken,
+					updateUI
+				);
+				profileButton.style.display = "none";
+			}
+		}
+
+		async function readMail() {
+			const currentAcc = myMSALObj.getAccountByHomeId(accountId);
+			if (currentAcc) {
+				const response = await getTokenPopup(tokenRequest, currentAcc).catch(
+					(error) => {
+						console.log(error);
+					}
+				);
+				callMSGraph(
+					graphConfig.graphMailEndpoint,
+					response.accessToken,
+					updateUI
+				);
+				mailButton.style.display = "none";
+			}
+		}
+
+		async function seeProfileRedirect() {
+			const currentAcc = myMSALObj.getAccountByHomeId(accountId);
+			if (currentAcc) {
+				const response = await getTokenRedirect(loginRequest, currentAcc).catch(
+					(error) => {
+						console.log(error);
+					}
+				);
+				callMSGraph(
+					graphConfig.graphMeEndpoint,
+					response.accessToken,
+					updateUI
+				);
+				profileButton.style.display = "none";
+			}
+		}
+
+		async function readMailRedirect() {
+			const currentAcc = myMSALObj.getAccountByHomeId(accountId);
+			if (currentAcc) {
+				const response = await getTokenRedirect(tokenRequest, currentAcc).catch(
+					(error) => {
+						console.log(error);
+					}
+				);
+				callMSGraph(
+					graphConfig.graphMailEndpoint,
+					response.accessToken,
+					updateUI
+				);
+				mailButton.style.display = "none";
+			}
+		}
+
+		/* ------------------------------------ */
+		/* ---------------- UI ---------------- */
+
+		// Select DOM elements to work with
+		const welcomeDiv = document.getElementById("WelcomeMessage");
+		const signInButton = document.getElementById("SignIn");
+		const cardDiv = document.getElementById("card-div");
+		const mailButton = document.getElementById("readMail");
+		const profileButton = document.getElementById("seeProfile");
+		const profileDiv = document.getElementById("profile-div");
+
+		function showWelcomeMessage(account) {
+			// Reconfiguring DOM elements
+			cardDiv.style.display = "initial";
+			welcomeDiv.innerHTML = `Welcome ${account.username}`;
+			// signInButton.nextElementSibling.style.display = 'none';
+			signInButton.addEventListener("click", signOut);
+			signInButton.setAttribute("class", "btn btn-success");
+			signInButton.innerHTML = "Sign Out";
+		}
+
+		function updateUI(data, endpoint) {
+			console.log("Graph API responded at: " + new Date().toString());
+
+			if (endpoint === graphConfig.graphMeEndpoint) {
+				const title = document.createElement("p");
+				title.innerHTML = "<strong>Title: </strong>" + data.jobTitle;
+				const email = document.createElement("p");
+				email.innerHTML = "<strong>Mail: </strong>" + data.mail;
+				const phone = document.createElement("p");
+				phone.innerHTML = "<strong>Phone: </strong>" + data.businessPhones[0];
+				const address = document.createElement("p");
+				address.innerHTML = "<strong>Location: </strong>" + data.officeLocation;
+				profileDiv.appendChild(title);
+				profileDiv.appendChild(email);
+				profileDiv.appendChild(phone);
+				profileDiv.appendChild(address);
+			} else if (endpoint === graphConfig.graphMailEndpoint) {
+				if (data.value.length < 1) {
+					alert("Your mailbox is empty!");
+				} else {
+					const tabList = document.getElementById("list-tab");
+					const tabContent = document.getElementById("nav-tabContent");
+
+					data.value.map((d, i) => {
+						// Keeping it simple
+						if (i < 10) {
+							const listItem = document.createElement("a");
+							listItem.setAttribute(
+								"class",
+								"list-group-item list-group-item-action"
+							);
+							listItem.setAttribute("id", "list" + i + "list");
+							listItem.setAttribute("data-toggle", "list");
+							listItem.setAttribute("href", "#list" + i);
+							listItem.setAttribute("role", "tab");
+							listItem.setAttribute("aria-controls", i);
+							listItem.innerHTML = d.subject;
+							tabList.appendChild(listItem);
+
+							const contentItem = document.createElement("div");
+							contentItem.setAttribute("class", "tab-pane fade");
+							contentItem.setAttribute("id", "list" + i);
+							contentItem.setAttribute("role", "tabpanel");
+							contentItem.setAttribute("aria-labelledby", "list" + i + "list");
+							contentItem.innerHTML =
+								"<strong> from: " +
+								d.from.emailAddress.address +
+								"</strong><br><br>" +
+								d.bodyPreview +
+								"...";
+							tabContent.appendChild(contentItem);
+						}
+					});
+				}
+			}
+		}
+
+		signInButton.addEventListener("click", signIn("redirect"));
+		mailButton.addEventListener("click", readMail);
+		profileButton.addEventListener("click", seeProfile);
+	</script>
+</body>
